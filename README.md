@@ -5,7 +5,7 @@ A small web app for recording daily worker attendance for six teams
 monthly totals.
 
 - **Stack:** Next.js (App Router), TypeScript, Tailwind CSS, Supabase (Postgres), Recharts, Vitest
-- **Pages:** `/` attendance form, `/dashboard` summaries and charts
+- **Pages:** `/` attendance form, `/dashboard` detail tables, charts and Excel download
 - **Rules:** one record per date, earliest date 21/10/2026, dates shown as DD/MM/YYYY,
   a day's record can be corrected or deleted (with a confirmation step)
 
@@ -89,9 +89,10 @@ the public anon key.
 app/page.tsx                  attendance form page
 app/dashboard/page.tsx        dashboard page
 components/AttendanceForm.tsx form with load/insert/update logic
-components/Dashboard.tsx      summary cards, table and charts
+components/Dashboard.tsx      day and month tables, charts, Excel button
 components/DateField.tsx      DD/MM/YYYY input with calendar button
-lib/attendance.ts             constants, date helpers and all calculations
+lib/attendance.ts             constants, date helpers, calculations, table and export data
+lib/excel.ts                  builds and downloads the .xlsx file
 lib/attendance.test.ts        unit tests
 lib/attendance-db.ts          Supabase reads and the upsert
 lib/supabase.ts               Supabase client (anon key only)

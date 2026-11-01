@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MIN_DATE_ISO,
+  dailyRows,
   dailyTotal,
   dailyTrend,
   displayToIso,
@@ -15,7 +16,10 @@ import {
   isoToDisplay,
   isoToMonthKey,
   monthKeyToDisplay,
+  exportSheets,
+  monthSummary,
   monthlyTeamTotals,
+  teamSummaries,
   monthlyWorkerDays,
   teamWorkers,
   teamsOnLeave,
@@ -264,5 +268,112 @@ describe("month input helpers", () => {
     expect(validateMonth("2027-01")).toBeNull();
     expect(validateMonth("2026-09")).toBe("No data before 10/2026.");
     expect(validateMonth(null)).toBe("Enter a month as MM/YYYY.");
+  });
+});
+
+describe("detailed tables", () => {
+  const records = [
+    rec("2026-10-22", all("Leave")),
+    rec("2026-10-21", mix), // 135 workers, 4 working, 1 on leave
+    rec("2026-10-23", all("1")), // 6 workers
+    rec("2026-11-01", all("50")), // other month
+  ];
+
+  it("lists recorded days of the month in date order with totals", () => {
+    const rows = dailyRows(records, "2026-10");
+    expect(rows.map((r) => r.display)).toEqual([
+      "21/10/2026",
+      "22/10/2026",
+      "23/10/2026",
+    ]);
+    expect(rows.map((r) => r.total)).toEqual([135, 0, 6]);
+    expect(rows.map((r) => r.working)).toEqual([4, 0, 6]);
+    expect(rows.map((r) => r.onLeave)).toEqual([1, 6, 0]);
+    expect(dailyRows(records, "2027-02")).toEqual([]);
+  });
+
+  it("summarises each team for the month", () => {
+    const t = teamSummaries(records, "2026-10");
+    expect(t.find((x) => x.key === "madam")).toEqual({
+      key: "madam",
+      label: "Madam",
+      workerDays: 1, // Leave, Leave, 1
+      daysWorked: 1,
+      daysOnLeave: 2,
+    });
+    expect(t.reduce((s, x) => s + x.workerDays, 0)).toBe(141);
+  });
+
+  it("summarises the month", () => {
+    expect(monthSummary(records, "2026-10")).toEqual({
+      daysRecorded: 3,
+      totalWorkerDays: 141,
+      averagePerDay: 47,
+      highest: { display: "21/10/2026", total: 135 },
+      lowest: { display: "22/10/2026", total: 0 },
+    });
+    expect(monthSummary([], "2026-10")).toEqual({
+      daysRecorded: 0,
+      totalWorkerDays: 0,
+      averagePerDay: 0,
+      highest: null,
+      lowest: null,
+    });
+  });
+
+  it("rounds the daily average to one decimal", () => {
+    const one = { ...all("0"), slg: "1" };
+    const r = [
+      rec("2026-10-21", one),
+      rec("2026-10-22", all("0")),
+      rec("2026-10-23", all("0")),
+    ];
+    expect(monthSummary(r, "2026-10").averagePerDay).toBe(0.3); // 1 / 3
+  });
+
+  it("builds the Excel sheets with numbers, Leave text and totals", () => {
+    const [month, team, daily] = exportSheets(records, "2026-10");
+    expect(month.name).toBe("Month summary");
+    expect(month.rows[1]).toEqual(["Month", "10/2026"]);
+    expect(month.rows[5]).toEqual([
+      "Total workers in the month (worker-days)",
+      141,
+    ]);
+
+    expect(team.rows[0]).toEqual([
+      "Team",
+      "Worker-days",
+      "Days worked",
+      "Days on Leave",
+    ]);
+    expect(team.rows[team.rows.length - 1]).toEqual(["Total", 141, "", ""]);
+
+    expect(daily.rows[0][0]).toBe("Date");
+    expect(daily.rows[1]).toEqual([
+      "21/10/2026",
+      10,
+      20,
+      "Leave",
+      0,
+      5,
+      100,
+      135,
+      4,
+      1,
+    ]);
+    expect(daily.rows[2][1]).toBe("Leave");
+    expect(daily.rows[daily.rows.length - 1]).toEqual([
+      "Month total",
+      11,
+      21,
+      1,
+      1,
+      6,
+      101,
+      141,
+      "",
+      "",
+    ]);
+    expect(daily.totalRow).toBe(daily.rows.length);
   });
 });

@@ -214,3 +214,184 @@ export function validateMonth(key: string | null): string | null {
   }
   return null;
 }
+
+// ---- Detailed tables and Excel export --------------------------------------
+
+/** One recorded day with its totals, for the daily table. */
+export type DayRow = {
+  date: string; // YYYY-MM-DD
+  display: string; // DD/MM/YYYY
+  values: TeamValues;
+  total: number;
+  working: number;
+  onLeave: number;
+};
+
+function pickTeams(r: TeamValues): TeamValues {
+  return Object.fromEntries(TEAMS.map((t) => [t.key, r[t.key]])) as TeamValues;
+}
+
+/** Every recorded day in the month with its totals, oldest first. */
+export function dailyRows(
+  records: AttendanceRecord[],
+  monthKey: string
+): DayRow[] {
+  return recordsInMonth(records, monthKey)
+    .map((r) => ({
+      date: r.attendance_date,
+      display: isoToDisplay(r.attendance_date),
+      values: pickTeams(r),
+      total: dailyTotal(r),
+      working: teamsWorking(r),
+      onLeave: teamsOnLeave(r),
+    }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+export type TeamSummary = {
+  key: TeamKey;
+  label: string;
+  workerDays: number;
+  daysWorked: number;
+  daysOnLeave: number;
+};
+
+/** Per team for the month: worker-days, days worked (>0) and days on Leave. */
+export function teamSummaries(
+  records: AttendanceRecord[],
+  monthKey: string
+): TeamSummary[] {
+  const month = recordsInMonth(records, monthKey);
+  return TEAMS.map((t) => ({
+    key: t.key,
+    label: t.label,
+    workerDays: month.reduce((s, r) => s + teamWorkers(r[t.key]), 0),
+    daysWorked: month.filter((r) => teamWorkers(r[t.key]) > 0).length,
+    daysOnLeave: month.filter((r) => r[t.key] === LEAVE).length,
+  }));
+}
+
+export type MonthSummary = {
+  daysRecorded: number;
+  totalWorkerDays: number;
+  averagePerDay: number; // one decimal place
+  highest: { display: string; total: number } | null;
+  lowest: { display: string; total: number } | null;
+};
+
+/** Headline numbers for the month. */
+export function monthSummary(
+  records: AttendanceRecord[],
+  monthKey: string
+): MonthSummary {
+  const rows = dailyRows(records, monthKey);
+  const totalWorkerDays = rows.reduce((s, r) => s + r.total, 0);
+  const pick = (better: (a: number, b: number) => boolean) =>
+    rows.reduce<DayRow | null>(
+      (best, r) => (best === null || better(r.total, best.total) ? r : best),
+      null
+    );
+  const hi = pick((a, b) => a > b);
+  const lo = pick((a, b) => a < b);
+  return {
+    daysRecorded: rows.length,
+    totalWorkerDays,
+    averagePerDay:
+      rows.length === 0
+        ? 0
+        : Math.round((totalWorkerDays / rows.length) * 10) / 10,
+    highest: hi && { display: hi.display, total: hi.total },
+    lowest: lo && { display: lo.display, total: lo.total },
+  };
+}
+
+export type SheetCell = string | number;
+
+export type ExportSheet = {
+  name: string;
+  rows: SheetCell[][];
+  /** 1-based row number of the header row. */
+  headerRow: number;
+  /** 1-based row number of a totals row, if any. */
+  totalRow?: number;
+  widths: number[];
+};
+
+/** A team value for a spreadsheet cell: a number, or the text "Leave". */
+function sheetValue(value: TeamValue): SheetCell {
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+/** The three sheets of the Excel download for a month. */
+export function exportSheets(
+  records: AttendanceRecord[],
+  monthKey: string
+): ExportSheet[] {
+  const days = dailyRows(records, monthKey);
+  const teams = teamSummaries(records, monthKey);
+  const summary = monthSummary(records, monthKey);
+  const label = monthKeyToDisplay(monthKey);
+  const dayText = (d: { display: string; total: number } | null) =>
+    d ? `${d.display} (${d.total} workers)` : "-";
+
+  const monthSheet: ExportSheet = {
+    name: "Month summary",
+    rows: [
+      ["SLG Housekeeping & Facility Services"],
+      ["Month", label],
+      [],
+      ["Item", "Value"],
+      ["Days recorded", summary.daysRecorded],
+      ["Total workers in the month (worker-days)", summary.totalWorkerDays],
+      ["Average workers per day", summary.averagePerDay],
+      ["Highest day", dayText(summary.highest)],
+      ["Lowest day", dayText(summary.lowest)],
+    ],
+    headerRow: 4,
+    widths: [42, 28],
+  };
+
+  const teamSheet: ExportSheet = {
+    name: "Team summary",
+    rows: [
+      ["Team", "Worker-days", "Days worked", "Days on Leave"],
+      ...teams.map((t) => [t.label, t.workerDays, t.daysWorked, t.daysOnLeave]),
+      ["Total", summary.totalWorkerDays, "", ""],
+    ],
+    headerRow: 1,
+    totalRow: teams.length + 2,
+    widths: [20, 16, 16, 16],
+  };
+
+  const dailySheet: ExportSheet = {
+    name: "Daily",
+    rows: [
+      [
+        "Date",
+        ...TEAMS.map((t) => t.label),
+        "Total workers",
+        "Teams working",
+        "Teams on Leave",
+      ],
+      ...days.map((d) => [
+        d.display,
+        ...TEAMS.map((t) => sheetValue(d.values[t.key])),
+        d.total,
+        d.working,
+        d.onLeave,
+      ]),
+      [
+        "Month total",
+        ...teams.map((t) => t.workerDays),
+        summary.totalWorkerDays,
+        "",
+        "",
+      ],
+    ],
+    headerRow: 1,
+    totalRow: days.length + 2,
+    widths: [14, ...TEAMS.map(() => 14), 15, 15, 15],
+  };
+
+  return [monthSheet, teamSheet, dailySheet];
+}

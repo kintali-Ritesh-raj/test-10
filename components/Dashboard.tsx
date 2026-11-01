@@ -16,18 +16,17 @@ import {
   MIN_DATE_ISO,
   MIN_MONTH_KEY,
   TEAMS,
+  dailyRows,
   dailyTotal,
-  dailyTrend,
   displayToIso,
   displayToMonthKey,
   formatMonthInput,
   isoToDisplay,
   isoToMonthKey,
   monthKeyToDisplay,
-  monthlyTeamTotals,
-  monthlyWorkerDays,
-  recordsInMonth,
+  monthSummary,
   shiftMonthKey,
+  teamSummaries,
   teamsOnLeave,
   teamsWorking,
   todayIso,
@@ -37,6 +36,7 @@ import {
   type TeamValues,
 } from "@/lib/attendance";
 import { fetchAttendance, fetchMonth } from "@/lib/attendance-db";
+import { downloadMonthExcel } from "@/lib/excel";
 import DateField from "./DateField";
 
 const NAVY = "#1F2A44";
@@ -48,16 +48,10 @@ type Load<T> =
   | { state: "error"; message: string }
   | { state: "ready"; data: T };
 
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-slate-300 bg-white p-4">
-      <p className="text-sm font-semibold text-slate-600">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-navy">{value}</p>
-    </div>
-  );
-}
-
 const messageClass = "rounded-md border px-3 py-2 text-sm font-semibold";
+const th = "px-3 py-2 font-semibold";
+const td = "px-3 py-2";
+const num = "text-right tabular-nums";
 
 export default function Dashboard() {
   const [dayText, setDayText] = useState("");
@@ -133,7 +127,7 @@ export default function Dashboard() {
       {/* ---------- Selected day ---------- */}
       <section aria-labelledby="day-heading" className="space-y-4">
         <h2 id="day-heading" className="text-xl font-bold text-navy">
-          Day summary
+          Day details
         </h2>
         <DateField
           id="day"
@@ -168,19 +162,15 @@ export default function Dashboard() {
             No attendance recorded for {isoToDisplay(validDay ?? "")}.
           </p>
         )}
-        {day.state === "ready" && day.data && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Total workers" value={dailyTotal(day.data)} />
-            <StatCard label="Teams working" value={teamsWorking(day.data)} />
-            <StatCard label="Teams on Leave" value={teamsOnLeave(day.data)} />
-          </div>
+        {day.state === "ready" && day.data && validDay && (
+          <DayTable values={day.data} display={isoToDisplay(validDay)} />
         )}
       </section>
 
       {/* ---------- Selected month ---------- */}
       <section aria-labelledby="month-heading" className="space-y-4">
         <h2 id="month-heading" className="text-xl font-bold text-navy">
-          Monthly summary
+          Monthly details
         </h2>
 
         <div>
@@ -246,6 +236,57 @@ export default function Dashboard() {
   );
 }
 
+/** The selected day: workers per team, then the day's totals. */
+function DayTable({ values, display }: { values: TeamValues; display: string }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[18rem] border-collapse text-left">
+        <caption className="sr-only">Attendance on {display}</caption>
+        <thead>
+          <tr className="bg-navy text-white">
+            <th scope="col" className={th}>
+              Team
+            </th>
+            <th scope="col" className={`${th} ${num}`}>
+              Workers on {display}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {TEAMS.map((t) => (
+            <tr key={t.key} className="border-b border-slate-300">
+              <th scope="row" className={`${td} font-normal`}>
+                {t.label}
+              </th>
+              <td className={`${td} ${num}`}>{values[t.key]}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-orange-100 font-bold">
+            <th scope="row" className={td}>
+              Total workers present
+            </th>
+            <td className={`${td} ${num}`}>{dailyTotal(values)}</td>
+          </tr>
+          <tr className="bg-slate-100">
+            <th scope="row" className={`${td} font-semibold`}>
+              Teams working
+            </th>
+            <td className={`${td} ${num}`}>{teamsWorking(values)}</td>
+          </tr>
+          <tr className="bg-slate-100">
+            <th scope="row" className={`${td} font-semibold`}>
+              Teams on Leave
+            </th>
+            <td className={`${td} ${num}`}>{teamsOnLeave(values)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 function MonthView({
   records,
   monthKey,
@@ -253,75 +294,254 @@ function MonthView({
   records: AttendanceRecord[];
   monthKey: string;
 }) {
-  const days = recordsInMonth(records, monthKey).length;
-  if (days === 0) {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const label = monthKeyToDisplay(monthKey);
+  const days = dailyRows(records, monthKey);
+
+  if (days.length === 0) {
     return (
       <p
         role="status"
         className={`${messageClass} border-slate-300 bg-slate-50`}
       >
-        No attendance recorded for {monthKeyToDisplay(monthKey)}.
+        No attendance recorded for {label}.
       </p>
     );
   }
 
-  const total = monthlyWorkerDays(records, monthKey);
-  const totals = monthlyTeamTotals(records, monthKey);
-  const teamData = TEAMS.map((t) => ({ team: t.label, workerDays: totals[t.key] }));
-  const trend = dailyTrend(records, monthKey).map((p) => ({
-    ...p,
-    label: isoToDisplay(p.date),
-    day: p.date.slice(8),
+  const summary = monthSummary(records, monthKey);
+  const teams = teamSummaries(records, monthKey);
+  const teamData = teams.map((t) => ({ team: t.label, workerDays: t.workerDays }));
+  const trend = days.map((d) => ({
+    label: d.display,
+    day: d.date.slice(8),
+    total: d.total,
   }));
+
+  async function onDownload() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadMonthExcel(records, monthKey);
+    } catch (err) {
+      setExportError(
+        `Could not create the Excel file: ${err instanceof Error ? err.message : "unknown error"}`
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <StatCard label="Monthly worker-days" value={total} />
-        <StatCard label="Days recorded" value={days} />
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={exporting}
+          className="rounded-md bg-accent px-4 py-2 font-bold text-navy hover:brightness-95 disabled:opacity-60"
+        >
+          {exporting ? "Preparing…" : "Download Excel (.xlsx)"}
+        </button>
+        <span className="text-sm text-slate-600">
+          Includes all tables for {label}.
+        </span>
       </div>
+      {exportError && (
+        <p
+          role="alert"
+          className={`${messageClass} border-red-700 bg-red-50 text-red-900`}
+        >
+          {exportError}
+        </p>
+      )}
 
+      {/* Month summary */}
       <div>
         <h3 className="mb-2 text-lg font-bold text-navy">
-          Team-wise worker-days
+          Month summary: {label}
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[20rem] border-collapse text-left">
-            <caption className="sr-only">
-              Worker-days per team for {monthKeyToDisplay(monthKey)}
-            </caption>
+            <caption className="sr-only">Summary for {label}</caption>
             <thead>
               <tr className="bg-navy text-white">
-                <th scope="col" className="px-3 py-2">
-                  Team
+                <th scope="col" className={th}>
+                  Item
                 </th>
-                <th scope="col" className="px-3 py-2 text-right">
-                  Worker-days
+                <th scope="col" className={`${th} ${num}`}>
+                  Value
                 </th>
               </tr>
             </thead>
             <tbody>
-              {teamData.map((row) => (
-                <tr key={row.team} className="border-b border-slate-300">
-                  <th scope="row" className="px-3 py-2 font-normal">
-                    {row.team}
+              <tr className="border-b border-slate-300">
+                <th scope="row" className={`${td} font-normal`}>
+                  Days recorded
+                </th>
+                <td className={`${td} ${num}`}>{summary.daysRecorded}</td>
+              </tr>
+              <tr className="border-b border-slate-300 bg-orange-100 font-bold">
+                <th scope="row" className={td}>
+                  Total workers in the month (worker-days)
+                </th>
+                <td className={`${td} ${num}`}>{summary.totalWorkerDays}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <th scope="row" className={`${td} font-normal`}>
+                  Average workers per day
+                </th>
+                <td className={`${td} ${num}`}>{summary.averagePerDay}</td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <th scope="row" className={`${td} font-normal`}>
+                  Highest day
+                </th>
+                <td className={`${td} ${num}`}>
+                  {summary.highest
+                    ? `${summary.highest.display} (${summary.highest.total})`
+                    : "-"}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-300">
+                <th scope="row" className={`${td} font-normal`}>
+                  Lowest day
+                </th>
+                <td className={`${td} ${num}`}>
+                  {summary.lowest
+                    ? `${summary.lowest.display} (${summary.lowest.total})`
+                    : "-"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Team summary */}
+      <div>
+        <h3 className="mb-2 text-lg font-bold text-navy">Team-wise summary</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[24rem] border-collapse text-left">
+            <caption className="sr-only">
+              Worker-days per team for {label}
+            </caption>
+            <thead>
+              <tr className="bg-navy text-white">
+                <th scope="col" className={th}>
+                  Team
+                </th>
+                <th scope="col" className={`${th} ${num}`}>
+                  Worker-days
+                </th>
+                <th scope="col" className={`${th} ${num}`}>
+                  Days worked
+                </th>
+                <th scope="col" className={`${th} ${num}`}>
+                  Days on Leave
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {teams.map((t) => (
+                <tr key={t.key} className="border-b border-slate-300">
+                  <th scope="row" className={`${td} font-normal`}>
+                    {t.label}
                   </th>
-                  <td className="px-3 py-2 text-right">{row.workerDays}</td>
+                  <td className={`${td} ${num}`}>{t.workerDays}</td>
+                  <td className={`${td} ${num}`}>{t.daysWorked}</td>
+                  <td className={`${td} ${num}`}>{t.daysOnLeave}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-slate-100 font-bold">
-                <th scope="row" className="px-3 py-2">
+              <tr className="bg-orange-100 font-bold">
+                <th scope="row" className={td}>
                   Overall monthly total
                 </th>
-                <td className="px-3 py-2 text-right">{total}</td>
+                <td className={`${td} ${num}`}>{summary.totalWorkerDays}</td>
+                <td className={td} />
+                <td className={td} />
               </tr>
             </tfoot>
           </table>
         </div>
       </div>
 
+      {/* Day-by-day table */}
+      <div>
+        <h3 className="mb-2 text-lg font-bold text-navy">
+          Day-by-day: workers present each day
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[44rem] border-collapse text-left">
+            <caption className="sr-only">
+              Workers per team for each recorded day in {label}
+            </caption>
+            <thead>
+              <tr className="bg-navy text-white">
+                <th scope="col" className={`${th} sticky left-0 bg-navy`}>
+                  Date
+                </th>
+                {TEAMS.map((t) => (
+                  <th key={t.key} scope="col" className={`${th} ${num}`}>
+                    {t.label}
+                  </th>
+                ))}
+                <th scope="col" className={`${th} ${num}`}>
+                  Total workers
+                </th>
+                <th scope="col" className={`${th} ${num}`}>
+                  Teams working
+                </th>
+                <th scope="col" className={`${th} ${num}`}>
+                  Teams on Leave
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {days.map((d) => (
+                <tr key={d.date} className="border-b border-slate-300">
+                  <th
+                    scope="row"
+                    className={`${td} sticky left-0 bg-white font-normal`}
+                  >
+                    {d.display}
+                  </th>
+                  {TEAMS.map((t) => (
+                    <td key={t.key} className={`${td} ${num}`}>
+                      {d.values[t.key]}
+                    </td>
+                  ))}
+                  <td className={`${td} ${num} font-bold`}>{d.total}</td>
+                  <td className={`${td} ${num}`}>{d.working}</td>
+                  <td className={`${td} ${num}`}>{d.onLeave}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-orange-100 font-bold">
+                <th scope="row" className={`${td} sticky left-0 bg-orange-100`}>
+                  Month total
+                </th>
+                {teams.map((t) => (
+                  <td key={t.key} className={`${td} ${num}`}>
+                    {t.workerDays}
+                  </td>
+                ))}
+                <td className={`${td} ${num}`}>{summary.totalWorkerDays}</td>
+                <td className={td} />
+                <td className={td} />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* Charts */}
       <div>
         <h3 className="mb-2 text-lg font-bold text-navy">
           Worker-days by team
@@ -349,9 +569,9 @@ function MonthView({
         <h3 className="mb-2 text-lg font-bold text-navy">Daily trend</h3>
         <div
           role="img"
-          aria-label={`Line chart of daily total workers for ${monthKeyToDisplay(
-            monthKey
-          )}: ${trend.map((p) => `${p.label} ${p.total}`).join(", ")}`}
+          aria-label={`Line chart of daily total workers for ${label}: ${trend
+            .map((p) => `${p.label} ${p.total}`)
+            .join(", ")}`}
           className="h-72 w-full"
         >
           <ResponsiveContainer width="100%" height="100%">
