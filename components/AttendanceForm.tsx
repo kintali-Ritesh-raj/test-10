@@ -26,11 +26,14 @@ import {
 type Mode = "idle" | "loading" | "existing" | "new" | "loadError";
 type Message = { type: "success" | "error"; text: string } | null;
 
-/** New days start with 0 workers in every team, so only changes need entering. */
+/**
+ * New days start with 0 workers in every team, except Madam who always has 1,
+ * so only changes need entering.
+ */
 const defaultValues = (): TeamValues => ({
   anandapuram: "0",
   slg: "0",
-  madam: "0",
+  madam: "1",
   kothavalasa: "0",
   airport: "0",
   dj: "0",
