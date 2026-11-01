@@ -22,13 +22,14 @@ import {
 type Mode = "idle" | "loading" | "existing" | "new" | "loadError";
 type Message = { type: "success" | "error"; text: string } | null;
 
-const emptyValues = (): TeamValues => ({
-  anandapuram: "",
-  slg: "",
-  madam: "",
-  kothavalasa: "",
-  airport: "",
-  dj: "",
+/** New days start with 0 workers in every team, so only changes need entering. */
+const defaultValues = (): TeamValues => ({
+  anandapuram: "0",
+  slg: "0",
+  madam: "0",
+  kothavalasa: "0",
+  airport: "0",
+  dj: "0",
 });
 
 const fieldClass =
@@ -36,7 +37,7 @@ const fieldClass =
 
 export default function AttendanceForm() {
   const [dateText, setDateText] = useState("");
-  const [values, setValues] = useState<TeamValues>(emptyValues);
+  const [values, setValues] = useState<TeamValues>(defaultValues);
   const [mode, setMode] = useState<Mode>("idle");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
@@ -62,7 +63,7 @@ export default function AttendanceForm() {
     setMissing([]);
     setConfirmingDelete(false);
     if (!validIso) {
-      setValues(emptyValues());
+      setValues(defaultValues());
       setMode("idle");
       return;
     }
@@ -72,12 +73,12 @@ export default function AttendanceForm() {
     fetchAttendance(validIso)
       .then((record) => {
         if (cancelled) return;
-        setValues(record ?? emptyValues());
+        setValues(record ?? defaultValues());
         setMode(record ? "existing" : "new");
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setValues(emptyValues());
+        setValues(defaultValues());
         setMode("loadError");
         setMessage({ type: "error", text: err.message });
       });
@@ -132,7 +133,7 @@ export default function AttendanceForm() {
     setMessage(null);
     try {
       await deleteAttendance(validIso);
-      setValues(emptyValues());
+      setValues(defaultValues());
       setMode("new");
       setMessage({
         type: "success",
@@ -205,9 +206,6 @@ export default function AttendanceForm() {
                 aria-invalid={isMissing ? true : undefined}
                 className={`${fieldClass} ${isMissing ? "border-red-700" : ""} disabled:bg-slate-100`}
               >
-                <option value="" disabled>
-                  Select…
-                </option>
                 {TEAM_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}
