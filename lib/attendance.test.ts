@@ -208,15 +208,15 @@ describe("date validation", () => {
     expect(formatDateInput("12/")).toBe("12");
   });
 
-  it("rejects dates before 21/10/2026 and invalid input", () => {
-    expect(MIN_DATE_ISO).toBe("2026-10-21");
-    expect(validateAttendanceDate("2026-10-21")).toBeNull();
-    expect(validateAttendanceDate("2026-10-22")).toBeNull();
+  it("rejects dates before 21/09/2026 and invalid input", () => {
+    expect(MIN_DATE_ISO).toBe("2026-09-21");
+    expect(validateAttendanceDate("2026-09-21")).toBeNull();
+    expect(validateAttendanceDate("2026-09-22")).toBeNull();
     expect(validateAttendanceDate("2030-12-31")).toBeNull();
-    expect(validateAttendanceDate("2026-10-20")).toBe(
-      "Attendance cannot be recorded before 21/10/2026."
+    expect(validateAttendanceDate("2026-09-20")).toBe(
+      "Attendance cannot be recorded before 21/09/2026."
     );
-    expect(validateAttendanceDate("2025-01-01")).toContain("21/10/2026");
+    expect(validateAttendanceDate("2025-01-01")).toContain("21/09/2026");
     expect(validateAttendanceDate(null)).toBe(
       "Enter a valid date as DD/MM/YYYY."
     );
@@ -262,11 +262,11 @@ describe("month input helpers", () => {
     expect(shiftMonthKey("bad", 1)).toBe("bad");
   });
 
-  it("rejects months before 10/2026", () => {
-    expect(MIN_MONTH_KEY).toBe("2026-10");
-    expect(validateMonth("2026-10")).toBeNull();
+  it("rejects months before 09/2026", () => {
+    expect(MIN_MONTH_KEY).toBe("2026-09");
+    expect(validateMonth("2026-09")).toBeNull();
     expect(validateMonth("2027-01")).toBeNull();
-    expect(validateMonth("2026-09")).toBe("No data before 10/2026.");
+    expect(validateMonth("2026-08")).toBe("No data before 09/2026.");
     expect(validateMonth(null)).toBe("Enter a month as MM/YYYY.");
   });
 });

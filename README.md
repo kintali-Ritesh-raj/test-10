@@ -6,7 +6,7 @@ monthly totals.
 
 - **Stack:** Next.js (App Router), TypeScript, Tailwind CSS, Supabase (Postgres), Recharts, Vitest
 - **Pages:** `/` attendance form, `/dashboard` detail tables, charts and Excel download
-- **Rules:** one record per date, earliest date 21/10/2026, dates shown as DD/MM/YYYY,
+- **Rules:** one record per date, earliest date 21/09/2026, dates shown as DD/MM/YYYY,
   a day's record can be corrected or deleted (with a confirmation step)
 
 ## 1. Supabase setup

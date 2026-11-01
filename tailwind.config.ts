@@ -11,6 +11,8 @@ const config: Config = {
       colors: {
         navy: "#1F2A44",
         accent: "#F97316",
+        // Darker orange for text on white (the main orange is too light to read).
+        "accent-dark": "#C2410C",
       },
     },
   },

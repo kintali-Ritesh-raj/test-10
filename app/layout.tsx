@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SLG Housekeeping & Facility Services",
-  description: "Daily worker attendance",
+  description: "Daily worker attendance for the ESA Hospital deep cleaning",
 };
 
 export const viewport: Viewport = {
