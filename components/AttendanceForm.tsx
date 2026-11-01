@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import DateField from "./DateField";
 import {
   MIN_DATE_ISO,
   TEAMS,
   TEAM_OPTIONS,
   displayToIso,
-  formatDateInput,
   isoToDisplay,
   todayIso,
   validateAttendanceDate,
@@ -37,7 +37,6 @@ export default function AttendanceForm() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   const [missing, setMissing] = useState<TeamKey[]>([]);
-  const pickerRef = useRef<HTMLInputElement>(null);
 
   // Derived from the text the user sees.
   const complete = dateText.length === 10;
@@ -80,16 +79,6 @@ export default function AttendanceForm() {
       cancelled = true;
     };
   }, [validIso]);
-
-  function openCalendar() {
-    const el = pickerRef.current;
-    if (!el) return;
-    try {
-      el.showPicker();
-    } catch {
-      el.focus();
-    }
-  }
 
   function onTeamChange(key: TeamKey, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -144,44 +133,14 @@ export default function AttendanceForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-6">
       <div>
-        <label htmlFor="date" className="mb-1 block font-semibold">
-          Date
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="date"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="DD/MM/YYYY"
-            maxLength={10}
-            value={dateText}
-            onChange={(e) => setDateText(formatDateInput(e.target.value))}
-            aria-invalid={dateError ? true : undefined}
-            aria-describedby="date-help"
-            className={`${fieldClass} max-w-[12rem]`}
-          />
-          <button
-            type="button"
-            onClick={openCalendar}
-            className="rounded-md border border-navy px-3 py-2 font-semibold text-navy hover:bg-slate-100"
-          >
-            Calendar
-          </button>
-          {/* Native picker only supplies the calendar; the visible date stays DD/MM/YYYY. */}
-          <input
-            ref={pickerRef}
-            type="date"
-            tabIndex={-1}
-            aria-hidden="true"
-            min={MIN_DATE_ISO}
-            value={validIso ?? ""}
-            onChange={(e) => {
-              if (e.target.value) setDateText(isoToDisplay(e.target.value));
-            }}
-            className="pointer-events-none absolute h-0 w-0 opacity-0"
-          />
-        </div>
+        <DateField
+          id="date"
+          label="Date"
+          value={dateText}
+          onChange={setDateText}
+          invalid={!!dateError}
+          describedBy="date-help"
+        />
         <p id="date-help" className="mt-1 text-sm text-slate-600">
           Earliest date: {isoToDisplay(MIN_DATE_ISO)}
         </p>

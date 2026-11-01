@@ -1,5 +1,10 @@
 import { getSupabase } from "./supabase";
-import { TEAMS, type TeamValues } from "./attendance";
+import {
+  TEAMS,
+  shiftMonthKey,
+  type AttendanceRecord,
+  type TeamValues,
+} from "./attendance";
 
 const TABLE = "daily_attendance";
 const TEAM_COLUMNS = TEAMS.map((t) => t.key).join(",");
@@ -34,4 +39,19 @@ export async function saveAttendance(
     );
 
   if (error) throw new Error(error.message);
+}
+
+/** All records for a month (YYYY-MM), oldest first. */
+export async function fetchMonth(monthKey: string): Promise<AttendanceRecord[]> {
+  const start = `${monthKey}-01`;
+  const end = `${shiftMonthKey(monthKey, 1)}-01`;
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .select(`attendance_date,${TEAM_COLUMNS}`)
+    .gte("attendance_date", start)
+    .lt("attendance_date", end)
+    .order("attendance_date", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data as unknown as AttendanceRecord[] | null) ?? [];
 }

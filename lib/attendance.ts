@@ -182,3 +182,35 @@ export function dailyTrend(
     .map((r) => ({ date: r.attendance_date, total: dailyTotal(r) }))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
+
+// ---- Month input helpers (dashboard) ----
+
+/** Earliest month with data (09/2026). */
+export const MIN_MONTH_KEY = MIN_DATE_ISO.slice(0, 7);
+
+/** Keeps digits only and inserts a slash as the user types: 102026 -> 10/2026. */
+export function formatMonthInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 6);
+  return [digits.slice(0, 2), digits.slice(2, 6)]
+    .filter((p) => p.length > 0)
+    .join("/");
+}
+
+/** Moves a YYYY-MM key forward or back by whole months. */
+export function shiftMonthKey(key: string, delta: number): string {
+  if (!isValidMonthKey(key)) return key;
+  const [y, m] = key.split("-").map(Number);
+  const index = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(index / 12);
+  const nm = (index % 12) + 1;
+  return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}`;
+}
+
+/** Error message for a bad month, or null if it is allowed. */
+export function validateMonth(key: string | null): string | null {
+  if (key === null) return "Enter a month as MM/YYYY.";
+  if (key < MIN_MONTH_KEY) {
+    return `No data before ${monthKeyToDisplay(MIN_MONTH_KEY)}.`;
+  }
+  return null;
+}

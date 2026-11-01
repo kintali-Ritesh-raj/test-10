@@ -6,6 +6,10 @@ import {
   displayToIso,
   displayToMonthKey,
   formatDateInput,
+  formatMonthInput,
+  MIN_MONTH_KEY,
+  shiftMonthKey,
+  validateMonth,
   isValidIsoDate,
   isValidMonthKey,
   isoToDisplay,
@@ -233,5 +237,32 @@ describe("month helpers", () => {
     expect(displayToMonthKey("1/2026")).toBeNull();
     expect(isoToMonthKey("2026-10-31")).toBe("2026-10");
     expect(isoToMonthKey("2026-02-30")).toBe("");
+  });
+});
+
+describe("month input helpers", () => {
+  it("formats typed input as MM/YYYY", () => {
+    expect(formatMonthInput("")).toBe("");
+    expect(formatMonthInput("1")).toBe("1");
+    expect(formatMonthInput("102026")).toBe("10/2026");
+    expect(formatMonthInput("10/2026")).toBe("10/2026");
+    expect(formatMonthInput("10/20269999")).toBe("10/2026");
+    expect(formatMonthInput("10/")).toBe("10");
+  });
+
+  it("shifts months across year boundaries", () => {
+    expect(shiftMonthKey("2026-10", 1)).toBe("2026-11");
+    expect(shiftMonthKey("2026-12", 1)).toBe("2027-01");
+    expect(shiftMonthKey("2027-01", -1)).toBe("2026-12");
+    expect(shiftMonthKey("2026-09", -9)).toBe("2025-12");
+    expect(shiftMonthKey("bad", 1)).toBe("bad");
+  });
+
+  it("rejects months before 09/2026", () => {
+    expect(MIN_MONTH_KEY).toBe("2026-09");
+    expect(validateMonth("2026-09")).toBeNull();
+    expect(validateMonth("2027-01")).toBeNull();
+    expect(validateMonth("2026-08")).toBe("No data before 09/2026.");
+    expect(validateMonth(null)).toBe("Enter a month as MM/YYYY.");
   });
 });
