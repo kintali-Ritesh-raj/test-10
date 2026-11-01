@@ -73,3 +73,16 @@ export async function deleteAttendance(isoDate: string): Promise<void> {
     throw new Error("Nothing was deleted. Deleting may not be allowed in the database yet.");
   }
 }
+
+/** The most recent recorded date (YYYY-MM-DD), or null if there are no records. */
+export async function fetchLatestDate(): Promise<string | null> {
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .select("attendance_date")
+    .order("attendance_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data?.attendance_date as string | undefined) ?? null;
+}

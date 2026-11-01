@@ -35,7 +35,12 @@ import {
   type AttendanceRecord,
   type TeamValues,
 } from "@/lib/attendance";
-import { fetchAttendance, fetchMonth } from "@/lib/attendance-db";
+import {
+  deleteAttendance,
+  fetchAttendance,
+  fetchLatestDate,
+  fetchMonth,
+} from "@/lib/attendance-db";
 import { downloadMonthExcel } from "@/lib/excel";
 import DateField from "./DateField";
 
@@ -60,6 +65,13 @@ export default function Dashboard() {
   const [month, setMonth] = useState<Load<AttendanceRecord[]>>({
     state: "idle",
   });
+  const [refresh, setRefresh] = useState(0); // bump to reload after a delete
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteNote, setDeleteNote] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   // Day derived from the text the user sees.
   const dayIso = dayText.length === 10 ? displayToIso(dayText) : null;
@@ -71,12 +83,26 @@ export default function Dashboard() {
   const monthError = monthText.length === 7 ? validateMonth(monthKey) : null;
   const validMonth = monthText.length === 7 && !monthError ? monthKey : null;
 
-  // Default to today and the current month, but never before the start.
+  // Open on the latest recorded day and its month so data shows straight away.
+  // With no records (or no connection) fall back to today, never before the start.
   useEffect(() => {
-    const today = todayIso();
-    const clamped = today < MIN_DATE_ISO ? MIN_DATE_ISO : today;
-    setDayText(isoToDisplay(clamped));
-    setMonthText(monthKeyToDisplay(isoToMonthKey(clamped)));
+    let cancelled = false;
+    (async () => {
+      let iso = todayIso();
+      if (iso < MIN_DATE_ISO) iso = MIN_DATE_ISO;
+      try {
+        const latest = await fetchLatestDate();
+        if (latest) iso = latest;
+      } catch {
+        // The day and month loaders below show the real error.
+      }
+      if (cancelled) return;
+      setDayText(isoToDisplay(iso));
+      setMonthText(monthKeyToDisplay(isoToMonthKey(iso)));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -95,7 +121,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [validDay]);
+  }, [validDay, refresh]);
 
   useEffect(() => {
     if (!validMonth) {
@@ -113,7 +139,30 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [validMonth]);
+  }, [validMonth, refresh]);
+
+  async function confirmDelete() {
+    if (!pendingDelete || deleting) return;
+    const date = pendingDelete;
+    setDeleting(true);
+    setDeleteNote(null);
+    try {
+      await deleteAttendance(date);
+      setDeleteNote({
+        type: "success",
+        text: `Attendance deleted for ${isoToDisplay(date)}.`,
+      });
+      setRefresh((n) => n + 1);
+    } catch (err) {
+      setDeleteNote({
+        type: "error",
+        text: `Could not delete ${isoToDisplay(date)}: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    } finally {
+      setPendingDelete(null);
+      setDeleting(false);
+    }
+  }
 
   function stepMonth(delta: number) {
     if (!validMonth) return;
@@ -124,6 +173,60 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
+      {deleteNote && (
+        <p
+          role={deleteNote.type === "error" ? "alert" : "status"}
+          className={`${messageClass} ${
+            deleteNote.type === "success"
+              ? "border-green-700 bg-green-50 text-green-900"
+              : "border-red-700 bg-red-50 text-red-900"
+          }`}
+        >
+          {deleteNote.text}
+        </p>
+      )}
+
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onKeyDown={(e) => e.key === "Escape" && !deleting && setPendingDelete(null)}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-title"
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+          >
+            <h2 id="delete-title" className="text-lg font-bold text-red-900">
+              Delete attendance for {isoToDisplay(pendingDelete)}?
+            </h2>
+            <p className="mt-2 text-sm">
+              This removes that day&apos;s record from the database. It cannot be
+              undone.
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="rounded-md bg-red-700 px-4 py-2 font-bold text-white hover:bg-red-800 disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => setPendingDelete(null)}
+                disabled={deleting}
+                className="rounded-md border border-navy px-4 py-2 font-semibold text-navy hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---------- Selected day ---------- */}
       <section aria-labelledby="day-heading" className="space-y-4">
         <h2 id="day-heading" className="text-xl font-bold text-navy">
@@ -163,7 +266,11 @@ export default function Dashboard() {
           </p>
         )}
         {day.state === "ready" && day.data && validDay && (
-          <DayTable values={day.data} display={isoToDisplay(validDay)} />
+          <DayTable
+            values={day.data}
+            display={isoToDisplay(validDay)}
+            onDelete={() => setPendingDelete(validDay)}
+          />
         )}
       </section>
 
@@ -229,7 +336,11 @@ export default function Dashboard() {
           </p>
         )}
         {month.state === "ready" && validMonth && (
-          <MonthView records={month.data} monthKey={validMonth} />
+          <MonthView
+            records={month.data}
+            monthKey={validMonth}
+            onDelete={setPendingDelete}
+          />
         )}
       </section>
     </div>
@@ -237,8 +348,17 @@ export default function Dashboard() {
 }
 
 /** The selected day: workers per team, then the day's totals. */
-function DayTable({ values, display }: { values: TeamValues; display: string }) {
+function DayTable({
+  values,
+  display,
+  onDelete,
+}: {
+  values: TeamValues;
+  display: string;
+  onDelete: () => void;
+}) {
   return (
+    <div className="space-y-3">
     <div className="overflow-x-auto">
       <table className="w-full min-w-[18rem] border-collapse text-left">
         <caption className="sr-only">Attendance on {display}</caption>
@@ -284,15 +404,25 @@ function DayTable({ values, display }: { values: TeamValues; display: string }) 
         </tfoot>
       </table>
     </div>
+    <button
+      type="button"
+      onClick={onDelete}
+      className="rounded-md border border-red-700 px-4 py-2 font-semibold text-red-700 hover:bg-red-50"
+    >
+      Delete this day&apos;s record
+    </button>
+    </div>
   );
 }
 
 function MonthView({
   records,
   monthKey,
+  onDelete,
 }: {
   records: AttendanceRecord[];
   monthKey: string;
+  onDelete: (isoDate: string) => void;
 }) {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -477,7 +607,7 @@ function MonthView({
           Day-by-day: workers present each day
         </h3>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] border-collapse text-left">
+          <table className="w-full min-w-[52rem] border-collapse text-left">
             <caption className="sr-only">
               Workers per team for each recorded day in {label}
             </caption>
@@ -500,6 +630,9 @@ function MonthView({
                 <th scope="col" className={`${th} ${num}`}>
                   Teams on Leave
                 </th>
+                <th scope="col" className={`${th} text-center`}>
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -519,6 +652,16 @@ function MonthView({
                   <td className={`${td} ${num} font-bold`}>{d.total}</td>
                   <td className={`${td} ${num}`}>{d.working}</td>
                   <td className={`${td} ${num}`}>{d.onLeave}</td>
+                  <td className={`${td} text-center`}>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(d.date)}
+                      aria-label={`Delete record for ${d.display}`}
+                      className="rounded-md border border-red-700 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -533,6 +676,7 @@ function MonthView({
                   </td>
                 ))}
                 <td className={`${td} ${num}`}>{summary.totalWorkerDays}</td>
+                <td className={td} />
                 <td className={td} />
                 <td className={td} />
               </tr>
