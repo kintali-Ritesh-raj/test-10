@@ -45,14 +45,15 @@ create trigger daily_attendance_set_updated_at
   for each row execute function public.set_updated_at();
 
 -- 3. Row Level Security --------------------------------------------------
--- With RLS on and no policy, the anon key can do nothing. We allow only
--- SELECT, INSERT and UPDATE. There is deliberately NO delete policy, so
--- historical records can never be deleted through the API.
+-- With RLS on and no policy, the anon key can do nothing. We allow SELECT,
+-- INSERT, UPDATE and DELETE. DELETE lets the app remove a day's record from
+-- the form. There is no login, so anyone with the site link can delete.
 alter table public.daily_attendance enable row level security;
 
 drop policy if exists "anon can read attendance"   on public.daily_attendance;
 drop policy if exists "anon can insert attendance" on public.daily_attendance;
 drop policy if exists "anon can update attendance" on public.daily_attendance;
+drop policy if exists "anon can delete attendance" on public.daily_attendance;
 
 create policy "anon can read attendance"
   on public.daily_attendance for select
@@ -70,6 +71,11 @@ create policy "anon can update attendance"
   using (true)
   with check (true);
 
+create policy "anon can delete attendance"
+  on public.daily_attendance for delete
+  to anon
+  using (true);
+
 -- 4. Table privileges ----------------------------------------------------
--- Grants mirror the policies: no delete privilege for anon.
-grant select, insert, update on public.daily_attendance to anon;
+-- Grants mirror the policies.
+grant select, insert, update, delete on public.daily_attendance to anon;

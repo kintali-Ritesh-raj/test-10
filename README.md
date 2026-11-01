@@ -7,7 +7,7 @@ monthly totals.
 - **Stack:** Next.js (App Router), TypeScript, Tailwind CSS, Supabase (Postgres), Recharts, Vitest
 - **Pages:** `/` attendance form, `/dashboard` summaries and charts
 - **Rules:** one record per date, earliest date 21/09/2026, dates shown as DD/MM/YYYY,
-  records can be corrected but never deleted
+  a day's record can be corrected or deleted (with a confirmation step)
 
 ## 1. Supabase setup
 
@@ -19,10 +19,18 @@ monthly totals.
 4. Open **Project Settings -> API** and copy the **Project URL** and the
    **anon / publishable** key.
 
-The schema turns on Row Level Security and allows only `select`, `insert` and
-`update` for the `anon` role. There is deliberately no delete policy, so records
-cannot be deleted through the app or the public API. To remove a row (for example
-test data) use the Supabase dashboard.
+The schema turns on Row Level Security and allows `select`, `insert`, `update`
+and `delete` for the `anon` role. Delete is what powers the **Delete this record**
+button on the attendance form.
+
+If you set the project up before delete was added, run this once in the SQL Editor:
+
+```sql
+create policy "anon can delete attendance"
+  on public.daily_attendance for delete to anon using (true);
+grant delete on public.daily_attendance to anon;
+notify pgrst, 'reload schema';
+```
 
 If the app says *"Could not find the table 'public.daily_attendance' in the schema cache"*,
 the table is missing or the cache is stale. Re-run the SQL, then run
@@ -99,8 +107,8 @@ supabase/schema.sql           table, constraints, trigger, RLS policies
 
 ## 6. Access and security
 
-The app has no login. Anyone who has the site URL can add or correct attendance,
+The app has no login. Anyone who has the site URL can add, correct or delete attendance,
 so keep the URL private. Because the anon key is public by design, Row Level
-Security is the real protection: it blocks deletes and the table's CHECK
-constraints reject invalid values. If you later need to restrict who can edit,
+Security and the table's CHECK constraints are the only protection, and that
+includes delete: anyone with the link can delete a day's record. If you later need to restrict who can edit,
 add Supabase Auth and tighten the policies in `supabase/schema.sql`.

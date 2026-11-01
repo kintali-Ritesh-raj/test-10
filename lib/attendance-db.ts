@@ -55,3 +55,21 @@ export async function fetchMonth(monthKey: string): Promise<AttendanceRecord[]> 
   if (error) throw new Error(error.message);
   return (data as unknown as AttendanceRecord[] | null) ?? [];
 }
+
+/**
+ * Deletes the record for a date. Requires the "anon can delete attendance"
+ * policy from supabase/schema.sql. Row Level Security hides rows without a
+ * policy, so a 0-row result means the delete was not allowed (or no record).
+ */
+export async function deleteAttendance(isoDate: string): Promise<void> {
+  const { data, error } = await getSupabase()
+    .from(TABLE)
+    .delete()
+    .eq("attendance_date", isoDate)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error("Nothing was deleted. Deleting may not be allowed in the database yet.");
+  }
+}

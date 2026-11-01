@@ -13,7 +13,11 @@ import {
   type TeamKey,
   type TeamValues,
 } from "@/lib/attendance";
-import { fetchAttendance, saveAttendance } from "@/lib/attendance-db";
+import {
+  deleteAttendance,
+  fetchAttendance,
+  saveAttendance,
+} from "@/lib/attendance-db";
 
 type Mode = "idle" | "loading" | "existing" | "new" | "loadError";
 type Message = { type: "success" | "error"; text: string } | null;
@@ -37,6 +41,8 @@ export default function AttendanceForm() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   const [missing, setMissing] = useState<TeamKey[]>([]);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Derived from the text the user sees.
   const complete = dateText.length === 10;
@@ -54,6 +60,7 @@ export default function AttendanceForm() {
   useEffect(() => {
     setMessage(null);
     setMissing([]);
+    setConfirmingDelete(false);
     if (!validIso) {
       setValues(emptyValues());
       setMode("idle");
@@ -119,6 +126,29 @@ export default function AttendanceForm() {
     }
   }
 
+  async function onDelete() {
+    if (deleting || !validIso) return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      await deleteAttendance(validIso);
+      setValues(emptyValues());
+      setMode("new");
+      setMessage({
+        type: "success",
+        text: `Attendance deleted for ${isoToDisplay(validIso)}.`,
+      });
+    } catch (err) {
+      setMessage({
+        type: "error",
+        text: `Could not delete: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    } finally {
+      setConfirmingDelete(false);
+      setDeleting(false);
+    }
+  }
+
   const status =
     mode === "loading"
       ? "Checking for an existing record…"
@@ -128,7 +158,7 @@ export default function AttendanceForm() {
           ? "New record"
           : "";
 
-  const formDisabled = !validIso || mode === "loading" || saving;
+  const formDisabled = !validIso || mode === "loading" || saving || deleting;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-6">
@@ -202,6 +232,50 @@ export default function AttendanceForm() {
               : "Save attendance"}
         </button>
       </div>
+
+      {mode === "existing" && (
+        <div className="border-t border-slate-300 pt-4">
+          {!confirmingDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              disabled={formDisabled}
+              className="rounded-md border border-red-700 px-4 py-2 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Delete this record
+            </button>
+          ) : (
+            <div
+              role="alertdialog"
+              aria-labelledby="delete-title"
+              className="rounded-md border border-red-700 bg-red-50 p-4"
+            >
+              <p id="delete-title" className="font-semibold text-red-900">
+                Delete the attendance record for {isoToDisplay(validIso ?? "")}?
+                This cannot be undone.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={deleting}
+                  className="rounded-md bg-red-700 px-4 py-2 font-bold text-white hover:bg-red-800 disabled:opacity-60"
+                >
+                  {deleting ? "Deleting…" : "Yes, delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="rounded-md border border-navy px-4 py-2 font-semibold text-navy hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {message && (
         <p
