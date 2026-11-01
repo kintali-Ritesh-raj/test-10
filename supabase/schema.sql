@@ -14,9 +14,9 @@ create table if not exists public.daily_attendance (
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
 
-  -- No records before the start date (21/09/2026).
+  -- No records before the start date (21/10/2026).
   constraint attendance_date_not_before_start
-    check (attendance_date >= date '2026-09-21'),
+    check (attendance_date >= date '2026-10-21'),
 
   -- Each team value is 'Leave' or a whole number 0-100 with no leading zeros.
   constraint anandapuram_valid check (anandapuram ~ '^(100|[1-9][0-9]|[0-9])$' or anandapuram = 'Leave'),

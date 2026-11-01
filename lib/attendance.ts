@@ -24,8 +24,8 @@ export const TEAM_OPTIONS: string[] = [
   LEAVE,
 ];
 
-/** Earliest allowed attendance date (21/09/2026). */
-export const MIN_DATE_ISO = "2026-09-21";
+/** Earliest allowed attendance date (21/10/2026). */
+export const MIN_DATE_ISO = "2026-10-21";
 
 // ---- Dates: plain strings only, never shifted through JS Date/timezones ----
 
@@ -185,7 +185,7 @@ export function dailyTrend(
 
 // ---- Month input helpers (dashboard) ----
 
-/** Earliest month with data (09/2026). */
+/** Earliest month with data (10/2026). */
 export const MIN_MONTH_KEY = MIN_DATE_ISO.slice(0, 7);
 
 /** Keeps digits only and inserts a slash as the user types: 102026 -> 10/2026. */
