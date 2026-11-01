@@ -6,7 +6,11 @@ import {
   MIN_DATE_ISO,
   TEAMS,
   TEAM_OPTIONS,
+  LEAVE,
+  dailyTotal,
   displayToIso,
+  teamsOnLeave,
+  teamsWorking,
   isoToDisplay,
   todayIso,
   validateAttendanceDate,
@@ -91,6 +95,15 @@ export default function AttendanceForm() {
   function onTeamChange(key: TeamKey, value: string) {
     setValues((v) => ({ ...v, [key]: value }));
     setMissing((m) => m.filter((k) => k !== key));
+    setMessage(null);
+  }
+
+  /** Marks every team as Leave. The user still presses Save to record it. */
+  function setAllLeave() {
+    setValues(
+      Object.fromEntries(TEAMS.map((t) => [t.key, LEAVE])) as TeamValues
+    );
+    setMissing([]);
     setMessage(null);
   }
 
@@ -189,6 +202,20 @@ export default function AttendanceForm() {
         </p>
       </div>
 
+      <div>
+        <button
+          type="button"
+          onClick={setAllLeave}
+          disabled={formDisabled}
+          className="rounded-md border border-navy px-4 py-2 font-semibold text-navy hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Leave (all teams)
+        </button>
+        <p className="mt-1 text-sm text-slate-600">
+          Sets every team to Leave. Press Save to record it.
+        </p>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         {TEAMS.map((team) => {
           const isMissing = missing.includes(team.key);
@@ -216,6 +243,23 @@ export default function AttendanceForm() {
           );
         })}
       </div>
+
+      {validIso && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md border-2 border-navy bg-slate-50 p-4"
+        >
+          <p className="text-sm font-semibold text-slate-600">
+            Total workers on {isoToDisplay(validIso)}
+          </p>
+          <p className="text-3xl font-bold text-navy">{dailyTotal(values)}</p>
+          <p className="text-sm text-slate-600">
+            {teamsWorking(values)} teams working · {teamsOnLeave(values)} on
+            Leave
+          </p>
+        </div>
+      )}
 
       <div>
         <button
